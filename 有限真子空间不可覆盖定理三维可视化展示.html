@@ -1,0 +1,191 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title> 有限真子空间不可覆盖定理三维可视化展示 </title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<style>
+  body{margin:0;background:#121212;color:#fff;font-family:Microsoft YaHei,sans-serif}
+  .panel{position:fixed;top:24px;left:24px;background:rgba(0,0,0,0.65);padding:16px;border-radius:10px}
+  label{display:block;margin:10px 0 4px}
+  input{width:260px}
+  #tVal{color:#ffd369;font-weight:bold}
+  #tip{margin-top:12px;font-size:14px}
+</style>
+</head>
+
+<body>
+<div class="panel">
+  <label>参数 t ： γ= α + t * β</label>
+  <input type="range" id="tSlider" min="-4" max="4" step="0.05" value="0">
+  <div>t = <span id="tVal">0.00</span></div>
+  <div id="tip">✅ γ 不属于 V1, V2</div>
+</div>
+
+<script>
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+camera.position.set(6,6,6);
+camera.lookAt(0,0,0);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.AxesHelper(5));
+
+// ========== 两个2维子空间（3维空间内） ==========
+// V1: y=0 绿色平面
+const matV1 = new THREE.MeshBasicMaterial({color:0x2ecc71, transparent:true, opacity:0.2, side:THREE.DoubleSide});
+const V1 = new THREE.Mesh(new THREE.PlaneGeometry(6,6), matV1);
+V1.rotation.x = Math.PI / 2;
+scene.add(V1);
+addLabel("V1", 0, 0, 3, 0x2ecc71);
+
+// V2: z=0 橙色平面
+const matV2 = new THREE.MeshBasicMaterial({color:0xff9800, transparent:true, opacity:0.2, side:THREE.DoubleSide});
+const V2 = new THREE.Mesh(new THREE.PlaneGeometry(6,6), matV2);
+scene.add(V2);
+addLabel("V2", 0, 3, 0, 0xff9800);
+
+// ========== 严格符合条件向量定义 ==========
+const alpha = new THREE.Vector3(1, 1.2, 1);  // α 不属于 V1
+const beta  = new THREE.Vector3(1, 0, 1);    // β属于 V1，不属于 V2
+
+let arrowA, arrowB, arrowTBeta, arrowG;
+let labelA, labelB, labelTBeta, labelG;
+let dashLines = [];
+
+// 通用箭头+文字标签
+function createArrow(vec, color, txt){
+  const dir = vec.clone().normalize();
+  const arr = new THREE.ArrowHelper(dir, new THREE.Vector3(), vec.length(), color, 0.3, 0.15);
+  scene.add(arr);
+
+  const sp = makeSpriteLabel(txt, vec, dir);
+  scene.add(sp);
+  return {arr, sp};
+}
+
+function makeSpriteLabel(text, vec, dir){
+  const c = document.createElement("canvas");
+  const ctx = c.getContext("2d");
+  c.width = 80; c.height = 40;
+  ctx.font = "bold 26px sans-serif";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, 6, 28);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({map:tex, transparent:true});
+  const spr = new THREE.Sprite(mat);
+  spr.scale.set(0.8, 0.4, 1);
+  spr.position.copy(vec).add(dir.multiplyScalar(0.45));
+  return spr;
+}
+
+// 平面标注
+function addLabel(text,x,y,z,color){
+  const c = document.createElement("canvas");
+  const ctx = c.getContext("2d");
+  c.width = 140; c.height = 60;
+  ctx.font = "bold 32px sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(text,12,38);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({map:tex, transparent:true, color:color});
+  const sp = new THREE.Sprite(mat);
+  sp.scale.set(2.2,1.2,1);
+  sp.position.set(x,y,z);
+  scene.add(sp);
+}
+
+// ========== 【疏朗大间隔 虚线】关键 ==========
+function drawDashed(start, end){
+  const pts = [start, end];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  // 短划线+大空白，做到疏朗
+  const mat = new THREE.LineDashedMaterial({
+    color: 0xeeeeee,
+    dashSize: 0.15,
+    gapSize: 0.35,
+    transparent: true,
+    opacity: 0.7
+  });
+  const line = new THREE.Line(geo, mat);
+  line.computeLineDistances();
+  scene.add(line);
+  dashLines.push(line);
+}
+
+function clearDash(){
+  dashLines.forEach(l=>scene.remove(l));
+  dashLines = [];
+}
+
+// 固定 alpha beta
+const objA = createArrow(alpha, 0x40a9ff, "α");
+arrowA = objA.arr; labelA = objA.sp;
+
+const objB = createArrow(beta, 0x00d8d6, "β");
+arrowB = objB.arr; labelB = objB.sp;
+
+// 更新动态：tβ 、γ、平行四边形虚线
+function updateAll(t){
+  // 销毁旧动态元素
+  if(arrowTBeta) scene.remove(arrowTBeta);
+  if(labelTBeta) scene.remove(labelTBeta);
+  if(arrowG) scene.remove(arrowG);
+  if(labelG) scene.remove(labelG);
+  clearDash();
+
+  const tBeta = beta.clone().multiplyScalar(t);
+  const gamma = alpha.clone().add(tBeta);
+
+  // 绘制 t·beta
+  const objTB = createArrow(tBeta, 0x74b9ff, "tβ");
+  arrowTBeta = objTB.arr; labelTBeta = objTB.sp;
+
+  // 绘制 gamma
+  const objG = createArrow(gamma, 0xff4757, "γ");
+  arrowG = objG.arr; labelG = objG.sp;
+
+  // 平行四边形两条虚线
+  drawDashed(alpha, gamma);
+  drawDashed(tBeta, gamma);
+
+  // 空间判定
+  const inV1 = Math.abs(gamma.y) < 0.002;
+  const inV2 = Math.abs(gamma.z) < 0.002;
+  const tip = document.getElementById("tip");
+  if(inV1){
+    tip.innerHTML = "❌ γ ∈ V1";
+    tip.style.color = "#ff6b6b";
+  }else if(inV2){
+    tip.innerHTML = "❌ γ ∈ V2";
+    tip.style.color = "#ff6b6b";
+  }else{
+    tip.innerHTML = "✅ γ 不属于 V1, V2";
+    tip.style.color = "#51cf66";
+  }
+}
+
+// 滑块
+const slider = document.getElementById("tSlider");
+const tValDom = document.getElementById("tVal");
+slider.oninput = ()=>{
+  const t = parseFloat(slider.value);
+  tValDom.textContent = t.toFixed(2);
+  updateAll(t);
+};
+
+// 渲染循环
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+updateAll(0);
+animate();
+</script>
+</body>
+</html>
