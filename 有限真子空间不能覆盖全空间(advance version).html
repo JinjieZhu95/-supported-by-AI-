@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>高等代数定理：子空间不能覆盖全空间 | 3D交互</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, monospace;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            backdrop-filter: blur(8px);
+            pointer-events: none;
+            z-index: 10;
+            font-size: 14px;
+            border-left: 3px solid #ff8844;
+            font-weight: 500;
+        }
+        #controls {
+            position: absolute;
+            bottom: 25px;
+            right: 25px;
+            background: rgba(20,20,30,0.85);
+            backdrop-filter: blur(8px);
+            padding: 15px 20px;
+            border-radius: 12px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 20;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid rgba(255,255,255,0.2);
+            min-width: 180px;
+            pointer-events: auto;
+            font-family: monospace;
+        }
+        .slider-container {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        input {
+            flex: 1;
+            cursor: pointer;
+            accent-color: #3a86ff;
+        }
+        .value-display {
+            background: #000000aa;
+            padding: 2px 8px;
+            border-radius: 20px;
+            min-width: 45px;
+            text-align: center;
+        }
+        button {
+            background: #3a86ff;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: monospace;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #2666cc;
+        }
+        .note {
+            font-size: 11px;
+            color: #ccc;
+            text-align: center;
+            margin-top: 5px;
+        }
+        .special-hint {
+            font-size: 11px;
+            color: #ffaa66;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        📐 定理：有限个真子空间不能覆盖全空间<br>
+        <span style="font-size:12px;">ℝ³ 中，平面 V₁ (y=0) 与 V₂ (x=z) 无法覆盖所有向量</span>
+    </div>
+    <div id="controls">
+        <div style="display: flex; justify-content: space-between;">
+            <span>⚡ γ = α + t·β</span>
+            <span style="color:#ffaa66;">t = <span id="tValue">0.60</span></span>
+        </div>
+        <div class="slider-container">
+            <span>t</span>
+            <input type="range" id="tSlider" min="-1.8" max="1.8" step="0.01" value="0.6">
+        </div>
+        <div class="special-hint">✨ 当 t = -1 时 γ 落在 V₂ 平面（向量高亮）</div>
+        <button id="resetBtn">⟳ 重置视角</button>
+        <div class="note">🖱️ 鼠标拖拽旋转 | 右键平移 | 滚动缩放</div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // --- 初始化场景 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a2a);
+        scene.fog = new THREE.FogExp2(0x0a0a2a, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(4.5, 3.5, 5);
+        camera.lookAt(1, 0.8, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.left = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        document.body.appendChild(labelRenderer.domElement);
+
+        // --- 轨道控制 ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.rotateSpeed = 1.0;
+        controls.zoomSpeed = 1.2;
+        controls.enableZoom = true;
+        controls.enablePan = true;
+        controls.target.set(1, 0.8, 0);
+        
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            camera.position.set(4.5, 3.5, 5);
+            controls.target.set(1, 0.8, 0);
+            controls.update();
+        });
+
+        // --- 辅助元素：简洁坐标轴 ---
+        const axesHelper = new THREE.AxesHelper(3.2);
+        scene.add(axesHelper);
+        const gridHelper = new THREE.GridHelper(8, 20, 0x88aaff, 0x335588);
+        gridHelper.position.y = -0.01;
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.3;
+        scene.add(gridHelper);
+
+        // --- 向量定义 ---
+        const alphaVec = new THREE.Vector3(1, 1, 0);   // α ∉ V₁
+        const betaVec = new THREE.Vector3(1, 0, 0);    // β ∈ V₁ 且 β ∉ V₂
+        let t = 0.6;
+        let gammaVec = alphaVec.clone().add(betaVec.clone().multiplyScalar(t));
+
+        // --- 平面 V₁: y=0 (半透明红色) ---
+        const planeV1Geo = new THREE.PlaneGeometry(4.5, 4.5);
+        const planeV1Mat = new THREE.MeshPhongMaterial({ color: 0xff6688, side: THREE.DoubleSide, transparent: true, opacity: 0.25 });
+        const planeV1 = new THREE.Mesh(planeV1Geo, planeV1Mat);
+        planeV1.rotation.x = -Math.PI / 2;
+        planeV1.position.y = 0;
+        scene.add(planeV1);
+        // 边框
+        const edgesV1 = new THREE.EdgesGeometry(planeV1Geo);
+        const wireV1 = new THREE.LineSegments(edgesV1, new THREE.LineBasicMaterial({ color: 0xff8888 }));
+        wireV1.rotation.copy(planeV1.rotation);
+        wireV1.position.copy(planeV1.position);
+        scene.add(wireV1);
+
+        // --- 平面 V₂: x = z (半透明蓝色) ---
+        const planeV2Geo = new THREE.PlaneGeometry(4.2, 4.2);
+        const planeV2Mat = new THREE.MeshPhongMaterial({ color: 0x66ccff, side: THREE.DoubleSide, transparent: true, opacity: 0.25 });
+        const planeV2 = new THREE.Mesh(planeV2Geo, planeV2Mat);
+        const targetNormal = new THREE.Vector3(1, 0, -1).normalize();
+        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), targetNormal);
+        planeV2.quaternion.copy(quat);
+        planeV2.position.set(0, 0, 0);
+        scene.add(planeV2);
+        const edgesV2 = new THREE.EdgesGeometry(planeV2Geo);
+        const wireV2 = new THREE.LineSegments(edgesV2, new THREE.LineBasicMaterial({ color: 0x88ccff }));
+        wireV2.quaternion.copy(planeV2.quaternion);
+        wireV2.position.copy(planeV2.position);
+        scene.add(wireV2);
+
+        // --- 平面标签 (简洁) ---
+        const makeSimpleLabel = (text, color, pos) => {
+            const div = document.createElement('div');
+            div.textContent = text;
+            div.style.color = color;
+            div.style.fontSize = '14px';
+            div.style.fontWeight = 'bold';
+            div.style.background = 'rgba(0,0,0,0.5)';
+            div.style.padding = '2px 8px';
+            div.style.borderRadius = '12px';
+            div.style.borderLeft = `2px solid ${color}`;
+            div.style.fontFamily = 'monospace';
+            const label = new CSS2DObject(div);
+            label.position.copy(pos);
+            scene.add(label);
+        };
+        makeSimpleLabel('V₁ : y = 0', '#ff8888', new THREE.Vector3(1.8, 0.4, 1.8));
+        makeSimpleLabel('V₂ : x = z', '#88ccff', new THREE.Vector3(-1.2, 0.9, 1.5));
+
+        // --- 向量箭头 ---
+        // α 箭头 (红色)
+        const arrowAlpha = new THREE.ArrowHelper(alphaVec.clone().normalize(), new THREE.Vector3(0,0,0), alphaVec.length(), 0xff6666, 0.45, 0.2);
+        scene.add(arrowAlpha);
+        // β 箭头 (绿色)
+        const arrowBeta = new THREE.ArrowHelper(betaVec.clone().normalize(), new THREE.Vector3(0,0,0), betaVec.length(), 0x66ff66, 0.4, 0.2);
+        scene.add(arrowBeta);
+        // γ 动态箭头 (初始蓝色)
+        let arrowGamma = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0x3399ff, 0.5, 0.25);
+        scene.add(arrowGamma);
+
+        // --- 虚线 (平行四边形法则) ---
+        let dashLine1 = null, dashLine2 = null;
+        function updateDashedLines() {
+            const A = alphaVec;
+            const tBeta = betaVec.clone().multiplyScalar(t);
+            const C = gammaVec;
+            if (dashLine1) scene.remove(dashLine1);
+            if (dashLine2) scene.remove(dashLine2);
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa66, linewidth: 1, transparent: true, opacity: 0.7 });
+            const geom1 = new THREE.BufferGeometry().setFromPoints([A, C]);
+            dashLine1 = new THREE.Line(geom1, lineMat);
+            const geom2 = new THREE.BufferGeometry().setFromPoints([tBeta, C]);
+            dashLine2 = new THREE.Line(geom2, lineMat);
+            scene.add(dashLine1);
+            scene.add(dashLine2);
+        }
+
+        // --- 简洁CSS2D标签 (只有符号) ---
+        let alphaLabel, betaLabel, gammaLabel, tBetaLabel;
+        function createVectorLabels() {
+            if (alphaLabel) scene.remove(alphaLabel);
+            if (betaLabel) scene.remove(betaLabel);
+            if (gammaLabel) scene.remove(gammaLabel);
+            if (tBetaLabel) scene.remove(tBetaLabel);
+            
+            const makeLabel = (text, color, pos, fontSize='1.2rem') => {
+                const div = document.createElement('div');
+                div.textContent = text;
+                div.style.color = color;
+                div.style.fontSize = fontSize;
+                div.style.fontWeight = 'bold';
+                div.style.textShadow = '1px 1px 0 black';
+                div.style.background = 'rgba(0,0,0,0.4)';
+                div.style.padding = '2px 8px';
+                div.style.borderRadius = '20px';
+                div.style.fontFamily = 'monospace';
+                const label = new CSS2DObject(div);
+                label.position.copy(pos);
+                scene.add(label);
+                return label;
+            };
+            alphaLabel = makeLabel('α', '#ff8888', alphaVec.clone().multiplyScalar(1.1), '1.2rem');
+            betaLabel = makeLabel('β', '#88ff88', betaVec.clone().multiplyScalar(1.15), '1.2rem');
+            gammaLabel = makeLabel('γ', '#88ccff', gammaVec, '1.2rem');
+            const tBetaPos = betaVec.clone().multiplyScalar(t);
+            tBetaLabel = makeLabel('tβ', '#ffaa66', tBetaPos, '1rem');
+        }
+        
+        // --- 更新γ箭头和标签颜色 (特殊t值高亮) ---
+        function updateGammaAndLabels() {
+            gammaVec = alphaVec.clone().add(betaVec.clone().multiplyScalar(t));
+            const gammaLen = gammaVec.length();
+            if (gammaLen > 0.01) {
+                const gammaDir = gammaVec.clone().normalize();
+                arrowGamma.setDirection(gammaDir);
+                arrowGamma.setLength(gammaLen, 0.5, 0.25);
+            }
+            // 特殊 t = -1 时高亮为橙色
+            const isSpecial = Math.abs(t + 1) < 0.01;
+            if (isSpecial) {
+                arrowGamma.setColor(0xff8844);
+                if (gammaLabel) gammaLabel.element.style.color = '#ff8844';
+                if (gammaLabel) gammaLabel.element.style.background = 'rgba(0,0,0,0.7)';
+            } else {
+                arrowGamma.setColor(0x3399ff);
+                if (gammaLabel) gammaLabel.element.style.color = '#88ccff';
+                if (gammaLabel) gammaLabel.element.style.background = 'rgba(0,0,0,0.4)';
+            }
+            // 更新虚线和平行四边形点
+            updateDashedLines();
+            // 更新标签位置
+            if (gammaLabel) gammaLabel.position.copy(gammaVec);
+            if (tBetaLabel) {
+                const tBetaPos = betaVec.clone().multiplyScalar(t);
+                tBetaLabel.position.copy(tBetaPos);
+            }
+            document.getElementById('tValue').innerText = t.toFixed(2);
+        }
+        
+        // --- 光照与装饰 ---
+        const ambientLight = new THREE.AmbientLight(0x404060);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(2, 5, 3);
+        scene.add(dirLight);
+        const fillLight = new THREE.PointLight(0x664422, 0.3);
+        fillLight.position.set(1, 2, 2);
+        scene.add(fillLight);
+        
+        // 简单星空点缀
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 600;
+        const starPositions = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount; i++) {
+            starPositions[i*3] = (Math.random() - 0.5) * 200;
+            starPositions[i*3+1] = (Math.random() - 0.5) * 80;
+            starPositions[i*3+2] = (Math.random() - 0.5) * 100 - 50;
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMaterial = new THREE.PointsMaterial({ color: 0xaaccff, size: 0.06, transparent: true, opacity: 0.5 });
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+        
+        // --- 初始化所有可视化元素 ---
+        createVectorLabels();
+        updateGammaAndLabels();
+        
+        // --- 滑块交互 ---
+        const slider = document.getElementById('tSlider');
+        slider.addEventListener('input', (e) => {
+            t = parseFloat(e.target.value);
+            updateGammaAndLabels();
+        });
+        
+        // --- 动画循环 ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            stars.rotation.y += 0.0005;
+            stars.rotation.x += 0.0003;
+            // 平面呼吸效果 (轻微透明度变化)
+            const opacity = 0.25 + Math.sin(Date.now() * 0.002) * 0.05;
+            planeV1.material.opacity = Math.min(0.35, Math.max(0.2, opacity));
+            planeV2.material.opacity = Math.min(0.35, Math.max(0.2, opacity));
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+        animate();
+        
+        // 窗口适配
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
